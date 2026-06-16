@@ -1,0 +1,27 @@
+name: Daily Email Briefing
+
+on:
+  schedule:
+    - cron: '35 21 * * *'  # KST 06:35 (UTC 21:35 전날)
+  workflow_dispatch:
+
+jobs:
+  send-email:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run email briefing
+        run: python src/main.py --mode email
+        env:
+          GMAIL_SENDER: ${{ secrets.GMAIL_SENDER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}

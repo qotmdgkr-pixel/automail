@@ -1,0 +1,26 @@
+name: Daily KakaoTalk Briefing
+
+on:
+  schedule:
+    - cron: '39 21 * * *'  # KST 06:39 (UTC 21:39 전날)
+  workflow_dispatch:
+
+jobs:
+  send-kakao:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run KakaoTalk briefing
+        run: python src/main.py --mode kakao
+        env:
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
+          NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
