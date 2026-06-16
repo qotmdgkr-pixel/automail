@@ -32,14 +32,15 @@ def _require(key: str) -> str:
 
 
 def send_email(subject: str, html_body: str, text_body: str) -> bool:
-    sender   = _require("GMAIL_SENDER")
-    password = _require("GMAIL_APP_PASSWORD")
-    to_addr  = _require("RECIPIENT_EMAIL")
+    sender    = _require("GMAIL_SENDER")
+    password  = _require("GMAIL_APP_PASSWORD")
+    to_raw    = _require("RECIPIENT_EMAIL")
+    to_list   = [addr.strip() for addr in to_raw.split(",") if addr.strip()]
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = sender
-    msg["To"]      = to_addr
+    msg["To"]      = ", ".join(to_list)
 
     msg.attach(MIMEText(text_body, "plain",  "utf-8"))
     msg.attach(MIMEText(html_body, "html",   "utf-8"))
@@ -50,8 +51,8 @@ def send_email(subject: str, html_body: str, text_body: str) -> bool:
             smtp.starttls()
             smtp.ehlo()
             smtp.login(sender, password)
-            smtp.sendmail(sender, to_addr, msg.as_bytes())
-        print(f"[email] 발송 완료 → {to_addr}")
+            smtp.sendmail(sender, to_list, msg.as_bytes())
+        print(f"[email] 발송 완료 → {', '.join(to_list)}")
         return True
     except smtplib.SMTPAuthenticationError:
         print("[email] 오류: Gmail 인증 실패. 앱 비밀번호를 확인하세요.", file=sys.stderr)

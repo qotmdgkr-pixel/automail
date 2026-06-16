@@ -11,6 +11,12 @@ import sys
 import traceback
 from datetime import datetime
 
+# Windows cp949 환경에서 유니코드 출력 보장
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 
 def _run(label: str, fn) -> bool:
     print(f"\n{'─'*50}")
@@ -18,7 +24,7 @@ def _run(label: str, fn) -> bool:
     print(f"{'─'*50}")
     try:
         fn()
-        print(f"  [{label}] 완료 ✓")
+        print(f"  [{label}] 완료 [OK]")
         return True
     except SystemExit as e:
         code = e.code if isinstance(e.code, int) else 1
@@ -26,7 +32,7 @@ def _run(label: str, fn) -> bool:
         return code == 0
     except Exception:
         traceback.print_exc()
-        print(f"  [{label}] 실패 ✗", file=sys.stderr)
+        print(f"  [{label}] 실패 [FAIL]", file=sys.stderr)
         return False
 
 
@@ -79,7 +85,7 @@ def main():
     print(f"{'━'*50}")
     all_ok = True
     for step, ok in results.items():
-        status = "✓" if ok else "✗"
+        status = "[OK]" if ok else "[NG]"
         print(f"  {status}  {step}")
         if not ok:
             all_ok = False

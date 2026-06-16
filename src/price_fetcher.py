@@ -46,8 +46,25 @@ def fetch_us() -> list:
     return rows
 
 
+def _fetch_kr_pykrx(code: str, date: str) -> dict:
+    """pykrx로 ETF 종가+등락률 조회 (FDR 폴백용)"""
+    from pykrx import stock as pkrx
+    start_str = (datetime.strptime(date, "%Y-%m-%d") - timedelta(days=10)).strftime("%Y%m%d")
+    date_str = date.replace("-", "")
+    df = pkrx.get_etf_ohlcv_by_date(start_str, date_str, code)
+    if df is None or df.empty:
+        raise ValueError("pykrx 데이터 없음")
+    close_today = int(df["종가"].iloc[-1])
+    if len(df) >= 2:
+        prev = int(df["종가"].iloc[-2])
+        change_pct = round((close_today - prev) / prev * 100, 2) if prev else None
+    else:
+        change_pct = None
+    return {"price": close_today, "change_pct": change_pct}
+
+
 def fetch_kr() -> list:
-    """국내 ETF 종가 + 등락률 수집 (FinanceDataReader)"""
+    """국내 ETF 종가 + 등락률 수집 (FinanceDataReader, pykrx 폴백)"""
     date = recent_close_date()
     start = (datetime.strptime(date, "%Y-%m-%d") - timedelta(days=10)).strftime("%Y-%m-%d")
 
@@ -66,12 +83,21 @@ def fetch_kr() -> list:
                 "price": close_today, "change_pct": change_pct,
                 "ok": True,
             })
-        except Exception as e:
-            rows.append({
-                "name": display, "ticker": code,
-                "price": None, "change_pct": None,
-                "ok": False, "err": str(e),
-            })
+        except Exception as fdr_err:
+            # pykrx 폴백
+            try:
+                result = _fetch_kr_pykrx(code, date)
+                rows.append({
+                    "name": display, "ticker": code,
+                    "price": result["price"], "change_pct": result["change_pct"],
+                    "ok": True,
+                })
+            except Exception:
+                rows.append({
+                    "name": display, "ticker": code,
+                    "price": None, "change_pct": None,
+                    "ok": False, "err": str(fdr_err),
+                })
     return rows
 
 
@@ -90,7 +116,7 @@ def print_results(us: list, kr: list):
         if r["ok"]:
             pct_val = r["change_pct"] or 0
             arrow = "▲" if pct_val >= 0 else "▼"
-            pct = f"{arrow}{abs(pct_val):+.2f}%"
+            pct = f"{arrow}{abs(pct_val):.2f}%"
             print(f"  {r['name']:<22} {r['ticker']:<6}  ${r['price']:>13,.2f}  {pct:>8}")
         else:
             print(f"  {r['name']:<22} {r['ticker']:<6}  {'조회 실패':>14}")
@@ -104,7 +130,7 @@ def print_results(us: list, kr: list):
         if r["ok"]:
             pct_val = r["change_pct"] or 0
             arrow = "▲" if pct_val >= 0 else "▼"
-            pct = f"{arrow}{abs(pct_val):+.2f}%"
+            pct = f"{arrow}{abs(pct_val):.2f}%"
             print(f"  {r['name']:<32} {ticker:<7} {r['price']:>10,}원  {pct:>8}")
         else:
             err = r.get("err", "오류")

@@ -235,28 +235,20 @@ def _kakao_price_kr(rows: list) -> str:
 
 
 def build_kakao_text(prices: dict, news: dict) -> str:
+    """전체 내용 생성 — 글자 수 제한 없음 (kakao_sender에서 분할 발송)"""
     date       = prices.get("date", datetime.now().strftime("%Y-%m-%d"))
     us_rows    = prices.get("us", [])
     kr_rows    = prices.get("kr", [])
     news_items = news.get("items", {})
     div        = "━" * 20
-    LIMIT      = 1980  # 여유 20자
 
     header = f"📊 포트폴리오 브리핑 | {date}\n{div}"
     us_sec = f"\n📈 미국 주식 (USD)\n{_kakao_price_us(us_rows)}"
     kr_sec = f"\n\n🇰🇷 국내 ETF (KRW)\n{_kakao_price_kr(kr_rows)}"
     footer = f"\n\n{div}\n자동생성 | {date}"
-    base   = header + us_sec + kr_sec + footer
 
-    # 뉴스를 종목별로 하나씩 추가, 한도 초과 직전에 멈춤
-    news_header = "\n\n📰 주요 뉴스"
-    body = base.replace(footer, news_header + footer)  # 뉴스 헤더 자리 확보
-    if len(body) > LIMIT:
-        return base  # 헤더만으로도 초과 — 뉴스 제외
-
+    news_lines = ["\n\n📰 주요 뉴스"]
     order = [r["ticker"] for r in us_rows] + [r["ticker"] for r in kr_rows]
-    accumulated = news_header  # footer 앞에 삽입될 텍스트
-
     for key in order:
         item = news_items.get(key)
         if not item:
@@ -265,34 +257,16 @@ def build_kakao_text(prices: dict, news: dict) -> str:
         intl = item.get("international", [])
         if not dom and not intl:
             continue
+        news_lines.append(f"\n▶ {item.get('name', key)}")
+        for i, a in enumerate(dom[:3]):
+            t = a["title"][:50] + "…" if len(a["title"]) > 50 else a["title"]
+            news_lines.append(f" [국]{CIRCLE_NUMS[i]} {t}")
+        for i, a in enumerate(intl[:3]):
+            t = a["title"][:50] + "…" if len(a["title"]) > 50 else a["title"]
+            news_lines.append(f" [해]{CIRCLE_NUMS[i]} {t}")
 
-        # 한 종목 블록 구성 (1건씩 → 2건씩 순서로 시도)
-        block_added = False
-        for max_n in (1, 2, 3):
-            lines = [f"\n▶ {item.get('name', key)}"]
-            for i, a in enumerate(dom[:max_n]):
-                t = a["title"][:50] + "…" if len(a["title"]) > 50 else a["title"]
-                lines.append(f" [국]{CIRCLE_NUMS[i]} {t}")
-            for i, a in enumerate(intl[:max_n]):
-                t = a["title"][:50] + "…" if len(a["title"]) > 50 else a["title"]
-                lines.append(f" [해]{CIRCLE_NUMS[i]} {t}")
-            block = "\n".join(lines)
-
-            candidate_acc = accumulated + block
-            candidate_txt = base.replace(footer, candidate_acc + footer)
-            if len(candidate_txt) <= LIMIT:
-                best_block = block
-                block_added = True
-            else:
-                break
-
-        if block_added:
-            accumulated += best_block
-        else:
-            break  # 1건도 못 넣으면 이후 종목 스킵
-
-    result = base.replace(footer, accumulated + footer)
-    return result if len(result) <= 2000 else base
+    news_sec = "\n".join(news_lines)
+    return header + us_sec + kr_sec + news_sec + footer
 
 
 # ── 저장 & 메인 ──────────────────────────────────────────────────────────────
@@ -323,8 +297,8 @@ def main():
     print(f"{'─'*50}")
     print(text)
     print(f"{'─'*50}")
-    print(f"글자 수: {len(text)} / 2000자")
-    print("OK" if len(text) <= 2000 else "WARNING: 2000자 초과!")
+    chunks = (len(text) + 1899) // 1900
+    print(f"글자 수: {len(text)}자 → {chunks}개 메시지로 분할 발송")
 
 
 if __name__ == "__main__":

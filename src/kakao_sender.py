@@ -68,11 +68,37 @@ def get_access_token(rest_api_key: str, refresh_token: str) -> str:
     return access_token
 
 
+CHUNK_LIMIT = 1880  # 페이지 표시(예: "(1/3)") 여유 포함
+
+
+def split_messages(text: str) -> list:
+    """텍스트를 CHUNK_LIMIT 이하의 청크로 분할 (줄 단위 유지)"""
+    if len(text) <= CHUNK_LIMIT:
+        return [text]
+
+    chunks = []
+    current_lines = []
+    current_len = 0
+
+    for line in text.split("\n"):
+        # +1은 \n 복원 비용
+        add_len = len(line) + (1 if current_lines else 0)
+        if current_len + add_len > CHUNK_LIMIT and current_lines:
+            chunks.append("\n".join(current_lines))
+            current_lines = [line]
+            current_len = len(line)
+        else:
+            current_lines.append(line)
+            current_len += add_len
+
+    if current_lines:
+        chunks.append("\n".join(current_lines))
+
+    return chunks
+
+
 def send_kakao_message(access_token: str, text: str) -> bool:
     """카카오톡 나에게 보내기 (텍스트 타입)"""
-    if len(text) > 2000:
-        text = text[:1900] + "\n...(생략)"
-
     template = json.dumps(
         {
             "object_type": "text",
@@ -96,7 +122,6 @@ def send_kakao_message(access_token: str, text: str) -> bool:
         with request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             if data.get("result_code") == 0:
-                print("[kakao] 발송 완료")
                 return True
             print(f"[kakao] 발송 실패: {data}", file=sys.stderr)
             return False
@@ -125,9 +150,20 @@ def main():
     print("[kakao] access_token 재발급 중...")
     access_token = get_access_token(rest_api_key, refresh_token)
 
-    print(f"[kakao] 메시지 발송 중... ({len(text)}자)")
-    ok = send_kakao_message(access_token, text)
-    sys.exit(0 if ok else 1)
+    chunks = split_messages(text)
+    total  = len(chunks)
+    print(f"[kakao] 메시지 발송 중... (총 {total}개, {len(text)}자)")
+
+    all_ok = True
+    for i, chunk in enumerate(chunks, 1):
+        label = f"\n({i}/{total})" if total > 1 else ""
+        ok = send_kakao_message(access_token, chunk + label)
+        if ok:
+            print(f"[kakao] ({i}/{total}) 발송 완료")
+        else:
+            all_ok = False
+
+    sys.exit(0 if all_ok else 1)
 
 
 if __name__ == "__main__":

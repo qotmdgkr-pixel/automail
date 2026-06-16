@@ -23,6 +23,6 @@ KR_ETFS = [
     {"display": "ACE 미국하이일드액티브(H)",    "keyword": "ACE미국하이일드액티브",   "code": "479850"},
     {"display": "ACE 미국달러 SOFR금리(합성)", "keyword": "ACE미국달러SOFR금리",     "code": "453850"},
     {"display": "TIGER 은행 고배당플러스TOP10","keyword": "TIGER은행고배당플러스",   "code": "449180"},
-    {"display": "KODEX 한국 부동산리츠인프라", "keyword": "KODEX한국부동산리츠",     "code": "432620"},  # FDR/Naver 데이터 미제공 — 수동 확인 필요
+    {"display": "KODEX 한국 부동산리츠인프라", "keyword": "KODEX한국부동산리츠",     "code": "476800"},
     {"display": "ACE 코리아밸류업",            "keyword": "ACE코리아밸류업",         "code": "475080"},
 ]
