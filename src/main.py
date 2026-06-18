@@ -60,15 +60,17 @@ def main():
 
     import price_fetcher
     import news_fetcher
+    import economic_calendar
     import briefing_builder
     import email_sender
     import kakao_sender
 
     results = {}
 
-    # Step 1-3: 데이터 수집 + 브리핑 생성 (항상 실행)
+    # Step 1-4: 데이터 수집 + 브리핑 생성 (항상 실행)
     results["가격 수집"]    = _run("가격 수집",    price_fetcher.main)
     results["뉴스 수집"]    = _run("뉴스 수집",    news_fetcher.main)
+    results["경제 캘린더"]  = _run("경제 캘린더",  economic_calendar.main)
     results["브리핑 생성"]  = _run("브리핑 생성",  briefing_builder.main)
 
     # Step 4-5: 발송 (모드에 따라)
