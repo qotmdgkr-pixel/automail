@@ -9,6 +9,7 @@ from pathlib import Path
 
 import FinanceDataReader as fdr
 import yfinance as yf
+from urllib import request as _urlreq
 
 from config import KR_ETFS, US_STOCKS
 
@@ -20,6 +21,14 @@ _INDEX_LIST = [
     {"name": "KOSPI",   "ticker": "^KS11"},
     {"name": "KOSDAQ",  "ticker": "^KQ11"},
 ]
+
+_FG_RATING_KR = {
+    "Extreme Fear": "극도공포",
+    "Fear":         "공포",
+    "Neutral":      "중립",
+    "Greed":        "탐욕",
+    "Extreme Greed":"극도탐욕",
+}
 
 
 def recent_close_date() -> str:
@@ -62,6 +71,34 @@ def fetch_indices() -> list:
                 "ok": False, "err": str(e),
             })
     return rows
+
+
+def fetch_us10y() -> dict:
+    """미국 10년물 국채 금리 조회 (^TNX)"""
+    try:
+        info    = yf.Ticker("^TNX").fast_info
+        rate    = round(info.last_price, 3)
+        prev    = round(info.previous_close, 3)
+        change_bp = round((rate - prev) * 100)  # 등락 (basis points)
+        return {"rate": rate, "change_bp": change_bp, "ok": True}
+    except Exception as e:
+        return {"rate": None, "change_bp": None, "ok": False, "err": str(e)}
+
+
+def fetch_fear_greed() -> dict:
+    """CNN 공포탐욕 지수 조회"""
+    url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+    req = _urlreq.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with _urlreq.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        fg        = data.get("fear_and_greed", {})
+        score     = round(float(fg.get("score", 0)), 1)
+        rating    = fg.get("rating", "")
+        rating_kr = _FG_RATING_KR.get(rating, rating)
+        return {"score": score, "rating": rating, "rating_kr": rating_kr, "ok": True}
+    except Exception as e:
+        return {"score": None, "rating": "", "rating_kr": "", "ok": False, "err": str(e)}
 
 
 def fetch_us() -> list:
@@ -150,7 +187,7 @@ def fetch_kr() -> list:
     return rows
 
 
-def print_results(us: list, kr: list, fx: dict, indices: list):
+def print_results(us: list, kr: list, fx: dict, indices: list, us10y: dict, fear_greed: dict):
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     W = 72
     print(f"\n{'━' * W}")
@@ -161,6 +198,18 @@ def print_results(us: list, kr: list, fx: dict, indices: list):
     if fx.get("ok"):
         arrow = "▲" if (fx["change_pct"] or 0) >= 0 else "▼"
         print(f"\n  💱 USD/KRW: {fx['rate']:,.2f}원  {arrow}{abs(fx['change_pct'] or 0):.2f}%")
+
+    # 10Y 국채 금리
+    if us10y.get("ok"):
+        bp = us10y.get("change_bp") or 0
+        arrow = "▲" if bp >= 0 else "▼"
+        print(f"  🏦 미국 10Y: {us10y['rate']:.3f}%  {arrow}{abs(bp)}bp")
+
+    # 공포탐욕 지수
+    if fear_greed.get("ok") and fear_greed.get("score") is not None:
+        score = fear_greed["score"]
+        label = fear_greed["rating_kr"]
+        print(f"  😨 공포탐욕: {score:.0f}  ({label})")
 
     # 주요 지수
     print(f"\n  ▶ 주요 지수")
@@ -215,13 +264,15 @@ def _week52_pos(price, w52_low, w52_high) -> int | None:
     return round((price - w52_low) / (w52_high - w52_low) * 100)
 
 
-def save_prices(us: list, kr: list, fx: dict, indices: list):
+def save_prices(us: list, kr: list, fx: dict, indices: list, us10y: dict, fear_greed: dict):
     """data/prices.json 저장"""
     DATA_DIR.mkdir(exist_ok=True)
     data = {
         "fetched_at": datetime.now().isoformat(timespec="seconds"),
         "date": datetime.now().strftime("%Y-%m-%d"),
         "fx": fx,
+        "us10y": us10y,
+        "fear_greed": fear_greed,
         "indices": indices,
         "us": us,
         "kr": kr,
@@ -235,6 +286,12 @@ def main():
     print("환율 조회 중...", flush=True)
     fx = fetch_fx()
 
+    print("미국 10Y 국채금리 조회 중...", flush=True)
+    us10y = fetch_us10y()
+
+    print("공포탐욕 지수 조회 중...", flush=True)
+    fear_greed = fetch_fear_greed()
+
     print("주요 지수 조회 중...", flush=True)
     indices = fetch_indices()
 
@@ -244,8 +301,8 @@ def main():
     print("국내 ETF 조회 중...", flush=True)
     kr = fetch_kr()
 
-    print_results(us, kr, fx, indices)
-    save_prices(us, kr, fx, indices)
+    print_results(us, kr, fx, indices, us10y, fear_greed)
+    save_prices(us, kr, fx, indices, us10y, fear_greed)
 
 
 if __name__ == "__main__":

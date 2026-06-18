@@ -50,20 +50,55 @@ def _html_section_header(title: str) -> str:
     return f'<h3 style="margin:28px 0 12px;font-size:16px;color:#1e3a5f;">{title}</h3>'
 
 
-def _html_fx_indices(fx: dict, indices: list) -> str:
-    """환율 + 주요 지수 섹션 HTML"""
+def _fg_color(score) -> str:
+    if score is None:
+        return "#6b7280"
+    if score <= 25:  return "#dc2626"
+    if score <= 45:  return "#f97316"
+    if score <= 55:  return "#6b7280"
+    if score <= 75:  return "#16a34a"
+    return "#065f46"
+
+
+def _html_fx_indices(fx: dict, indices: list, us10y: dict, fear_greed: dict) -> str:
+    """환율 + 10Y금리 + 공포탐욕 + 주요 지수 섹션 HTML"""
     html = ""
 
+    # 환율 / 10Y / 공포탐욕 — 한 줄 카드 묶음
+    cards = []
     if fx.get("ok") and fx.get("rate"):
         pct   = _pct_str(fx.get("change_pct"))
         color = _pct_color(fx.get("change_pct"))
-        html += f"""
-    <div style="background:#f8fafc;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
-      <span style="font-size:13px;color:#6b7280;font-weight:600;">💱 USD/KRW&nbsp;&nbsp;</span>
-      <span style="font-size:18px;font-weight:700;">{fx['rate']:,.2f}원</span>
-      <span style="font-size:13px;color:{color};font-weight:600;margin-left:8px;">{pct}</span>
-    </div>"""
+        cards.append(
+            f'<div style="flex:1;background:#f8fafc;border-radius:8px;padding:10px 14px;">'
+            f'<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">💱 USD/KRW</div>'
+            f'<div style="font-size:16px;font-weight:700;">{fx["rate"]:,.2f}원</div>'
+            f'<div style="font-size:12px;color:{color};font-weight:600;">{pct}</div></div>'
+        )
+    if us10y.get("ok") and us10y.get("rate") is not None:
+        bp    = us10y.get("change_bp") or 0
+        arrow = "▲" if bp >= 0 else "▼"
+        color = "#dc2626" if bp > 0 else "#16a34a" if bp < 0 else "#374151"
+        cards.append(
+            f'<div style="flex:1;background:#f8fafc;border-radius:8px;padding:10px 14px;">'
+            f'<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">🏦 미국 10Y 금리</div>'
+            f'<div style="font-size:16px;font-weight:700;">{us10y["rate"]:.3f}%</div>'
+            f'<div style="font-size:12px;color:{color};font-weight:600;">{arrow}{abs(bp)}bp</div></div>'
+        )
+    if fear_greed.get("ok") and fear_greed.get("score") is not None:
+        score = fear_greed["score"]
+        color = _fg_color(score)
+        label = fear_greed.get("rating_kr", "")
+        cards.append(
+            f'<div style="flex:1;background:#f8fafc;border-radius:8px;padding:10px 14px;">'
+            f'<div style="font-size:11px;color:#6b7280;margin-bottom:4px;">😨 공포탐욕 지수</div>'
+            f'<div style="font-size:16px;font-weight:700;color:{color};">{score:.0f}</div>'
+            f'<div style="font-size:12px;color:{color};font-weight:600;">{label}</div></div>'
+        )
+    if cards:
+        html += f'\n    <div style="display:flex;gap:10px;margin-bottom:16px;">{"".join(cards)}</div>'
 
+    # 주요 지수 테이블
     if indices:
         html += """
     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;">
@@ -271,10 +306,12 @@ def build_email_html(prices: dict, news: dict, calendar: dict) -> str:
     us_rows    = prices.get("us", [])
     kr_rows    = prices.get("kr", [])
     fx         = prices.get("fx", {})
+    us10y      = prices.get("us10y", {})
+    fear_greed = prices.get("fear_greed", {})
     indices    = prices.get("indices", [])
     news_items = news.get("items", {})
 
-    fx_idx_html = _html_fx_indices(fx, indices)
+    fx_idx_html = _html_fx_indices(fx, indices, us10y, fear_greed)
     table_us    = _html_price_table_us(us_rows)
     table_kr    = _html_price_table_kr(kr_rows)
     cal_html    = _html_economic_calendar(calendar)
@@ -348,10 +385,16 @@ def _kakao_w52(price, w52_low, w52_high) -> str:
     return f" [52w:{pos}%]" if pos is not None else ""
 
 
-def _kakao_fx_indices(fx: dict, indices: list) -> str:
+def _kakao_fx_indices(fx: dict, indices: list, us10y: dict, fear_greed: dict) -> str:
     lines = []
     if fx.get("ok") and fx.get("rate"):
         lines.append(f"💱 USD/KRW  {fx['rate']:,.2f}원  {_kakao_pct(fx.get('change_pct'))}")
+    if us10y.get("ok") and us10y.get("rate") is not None:
+        bp    = us10y.get("change_bp") or 0
+        arrow = "▲" if bp >= 0 else "▼"
+        lines.append(f"🏦 미국 10Y  {us10y['rate']:.3f}%  {arrow}{abs(bp)}bp")
+    if fear_greed.get("ok") and fear_greed.get("score") is not None:
+        lines.append(f"😨 공포탐욕  {fear_greed['score']:.0f}  ({fear_greed.get('rating_kr','')})")
     if indices:
         lines.append("📊 주요 지수")
         for idx in indices:
@@ -411,12 +454,14 @@ def build_kakao_text(prices: dict, news: dict, calendar: dict) -> str:
     us_rows    = prices.get("us", [])
     kr_rows    = prices.get("kr", [])
     fx         = prices.get("fx", {})
+    us10y      = prices.get("us10y", {})
+    fear_greed = prices.get("fear_greed", {})
     indices    = prices.get("indices", [])
     news_items = news.get("items", {})
     div        = "━" * 20
 
     header  = f"📊 포트폴리오 브리핑 | {date}\n{div}"
-    fx_sec  = f"\n{_kakao_fx_indices(fx, indices)}" if (fx.get("ok") or indices) else ""
+    fx_sec  = f"\n{_kakao_fx_indices(fx, indices, us10y, fear_greed)}" if (fx.get("ok") or indices) else ""
     us_sec  = f"\n\n📈 미국 주식 (USD)\n{_kakao_price_us(us_rows)}"
     kr_sec  = f"\n\n🇰🇷 국내 ETF (KRW)\n{_kakao_price_kr(kr_rows)}"
     cal_sec = f"\n\n📅 경제 지표 발표\n{_kakao_economic_calendar(calendar)}"
