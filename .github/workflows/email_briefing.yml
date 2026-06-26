@@ -1,8 +1,6 @@
 name: Daily Email Briefing
 
 on:
-  schedule:
-    - cron: '35 21 * * *'  # KST 06:35 (UTC 21:35 전날)
   workflow_dispatch:
 
 jobs:

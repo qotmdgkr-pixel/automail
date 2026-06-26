@@ -1,8 +1,6 @@
 name: Daily KakaoTalk Briefing
 
 on:
-  schedule:
-    - cron: '39 21 * * *'  # KST 06:39 (UTC 21:39 전날)
   workflow_dispatch:
 
 jobs:
